@@ -14,7 +14,8 @@ export default function Providers({children}: {children: React.ReactNode}) {
         },
         solanaClusters: [{name: 'devnet', rpcUrl: 'https://devnet.helius-rpc.com/?api-key=0d1efb96-f508-493e-a545-870046d02c68'}],
         appearance: {
-            theme: 'dark'
+            theme: 'dark',
+            // loginMethods: ['email', 'farcaster']
         },
       }}
     >

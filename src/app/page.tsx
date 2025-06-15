@@ -1,103 +1,129 @@
-import Image from "next/image";
+'use client';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { usePrivy } from '@privy-io/react-auth';
+import { useSolanaWallets, useSignTransaction } from '@privy-io/react-auth/solana';
+import {
+  Connection,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  TransactionInstruction,
+} from '@solana/web3.js';
+
+const PROGRAM_ID = new PublicKey("7YLZNk621SNwX5TLWVet9PhKjEuCjezUs95S1tJGQBRU");
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const { ready, authenticated, user } = usePrivy();
+  const router = useRouter();
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+  if (!ready) {
+    // Do nothing while the PrivyProvider initializes with updated user state
+    return <></>;
+  }
+
+  if (ready && !authenticated) {
+      // Replace this code with however you'd like to handle an unauthenticated user
+      // As an example, you might redirect them to a login page
+      router.push("/login");
+      return <></>;
+  }
+
+  if (ready && authenticated) {
+      // Replace this code with however you'd like to handle an authenticated user
+      return <Authenticated />;
+  }
+  
+}
+
+function Authenticated() {
+  const { user } = usePrivy();
+  const { createWallet } = useSolanaWallets();
+  const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
+  const [txLink, setTxLink] = useState('');
+  const {signTransaction} = useSignTransaction();
+
+  useEffect(() => {
+    if (!user?.wallet) {
+      createWallet(); // Create the embedded Solana wallet if not yet created
+    }
+  }, [user, createWallet]);
+
+  const handleCreateEntry = async () => {
+    if (!user?.wallet) return;
+
+    const connection = new Connection("https://api.devnet.solana.com");
+    const owner = new PublicKey(user.wallet.address);
+
+    const [entryPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from(title), owner.toBuffer()],
+      PROGRAM_ID
+    );
+
+    // Discriminator for "create_entry"
+    const discriminator = Uint8Array.from([248, 207, 142, 242, 66, 162, 150, 16]);
+
+    const encodeString = (str: string) => {
+      const buf = Buffer.from(str);
+      return Buffer.concat([Buffer.from(Uint8Array.of(buf.length)), buf]);
+    };
+
+    const data = Buffer.concat([
+      discriminator,
+      encodeString(title),
+      encodeString(message),
+    ]);
+
+    const instruction = new TransactionInstruction({
+      programId: PROGRAM_ID,
+      keys: [
+        { pubkey: entryPDA, isSigner: false, isWritable: true },
+        { pubkey: owner, isSigner: true, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      data,
+    });
+
+    const tx = new Transaction().add(instruction);
+    tx.feePayer = owner;
+    tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+    const signed = await signTransaction({ transaction: tx, connection });
+    const sig = await connection.sendRawTransaction(signed.serialize());
+    await connection.confirmTransaction(sig);
+
+    setTxLink(`https://solscan.io/tx/${sig}?cluster=devnet`);
+  };
+
+  return (
+    <div style={{ padding: '2rem' }}>
+      <h1>Hello</h1>  
+      <h2>{user?.wallet?.address}</h2>
+
+      <div style={{ marginTop: '2rem' }}>
+        <input
+          placeholder="Title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          style={{ padding: '0.5rem', marginRight: '1rem' }}
+        />
+        <input
+          placeholder="Message"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          style={{ padding: '0.5rem', marginRight: '1rem' }}
+        />
+        <button onClick={handleCreateEntry} style={{ padding: '0.5rem' }}>
+          Create Entry
+        </button>
+      </div>
+
+      {txLink && (
+        <p style={{ marginTop: '1rem' }}>
+          ✅ Transaction submitted: <a href={txLink} target="_blank">View on Solscan</a>
+        </p>
+      )}
     </div>
   );
 }
